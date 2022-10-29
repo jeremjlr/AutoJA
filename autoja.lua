@@ -22,7 +22,7 @@ require 'common'
 require 'ffxi.recast'
 
 timer_started = false;
-active_abilities = {},{"en", "recast_id", "tp_cost", "engaged_only"};
+active_abilities = {},{"en", "recast_id", "tp_cost", "engaged_only", "use_if_paralyzed"};
 
 function AutoJAMessage(message)
   print("\31\200[\31\05AutoJA\31\200]\31\207 " .. message)
@@ -43,7 +43,7 @@ ashita.register_event('command', function(command, ntype)
     end
 
     if args[2] == "help" then
-      Print_Help("add", "Adds the ability to the active list. Only accepts self-targeting abilities. Add engaged as fourth argument in order to use the ability only when engaged. ie:/autoja add berserk engaged");
+      Print_Help("add", "Adds the ability to the active list. Only accepts self-targeting abilities. /autoja add [ability] [engaged_only=off] [use_if_paralyzed=off]. ie: /autoja add berserk on on");
       Print_Help("remove", "Removes the ability from the active list.");
       Print_Help("clear", "Clears the active list.");
       Print_Help("list", "Lists the active list.");
@@ -62,13 +62,21 @@ ashita.register_event('command', function(command, ntype)
       tocheck_name = args[3]:lower();
       tocheck_ability = AshitaCore:GetResourceManager():GetAbilityByName(tocheck_name, 0);
       if tocheck_ability ~= nil and tocheck_ability.ValidTargets == 1 then
-        if args[4] ~= nil and args[4] == "engaged" then
-          temp = {en=tocheck_name, recast_id=tocheck_ability.TimerId, tp_cost=tocheck_ability.TP, engaged_only=true};
+        if args[4] ~= nil and args[4] == "on" then
+          if args[5] ~= nil and args[5] == "on" then
+            temp = {en=tocheck_name, recast_id=tocheck_ability.TimerId, tp_cost=tocheck_ability.TP, engaged_only=true, use_if_paralyzed=true};
+          else
+            temp = {en=tocheck_name, recast_id=tocheck_ability.TimerId, tp_cost=tocheck_ability.TP, engaged_only=true, use_if_paralyzed=false};
+          end
         else
-          temp = {en=tocheck_name, recast_id=tocheck_ability.TimerId, tp_cost=tocheck_ability.TP, engaged_only=false};
+          if args[5] ~= nil and args[5] == "on" then
+            temp = {en=tocheck_name, recast_id=tocheck_ability.TimerId, tp_cost=tocheck_ability.TP, engaged_only=false, use_if_paralyzed=true};
+          else
+            temp = {en=tocheck_name, recast_id=tocheck_ability.TimerId, tp_cost=tocheck_ability.TP, engaged_only=false, use_if_paralyzed=false};
+          end
         end
         table.insert(active_abilities, temp);
-        AutoJAMessage(args[3] .. " was added. Engaged only: "..tostring(temp.engaged_only));
+        AutoJAMessage(args[3] .. " was added. Engaged only: "..tostring(temp.engaged_only).." || Use if paralyzed: "..tostring(temp.use_if_paralyzed));
         return true;
       end
       AutoJAMessage(args[3] .. " is not a valid JA and could not be added.");
@@ -84,13 +92,13 @@ ashita.register_event('command', function(command, ntype)
       AutoJAMessage(args[3] .. " is not an active ability.");
       return true;
     elseif args[2] == "clear" then
-      active_abilities = {},{"en", "recast_id", "tp_cost", "engaged_only"};
+      active_abilities = {},{"en", "recast_id", "tp_cost", "engaged_only", "use_if_paralyzed"};
       AutoJAMessage("Active abilities cleared.");
       return true;
     elseif args[2] == "list" then
       AutoJAMessage("Active abilities :");
       for i,v in pairs(active_abilities) do
-        AutoJAMessage(i..": "..v.en);
+        AutoJAMessage(i..": "..v.en..". Engaged only: "..tostring(v.engaged_only).." || Use if paralyzed: "..tostring(v.use_if_paralyzed));
       end
       return true;
     elseif args[2] == "proc" then
@@ -124,14 +132,17 @@ end
 function UseAbilities()
   for i,v in pairs(active_abilities) do
     if not HaveBuff(v.en) then
-      --ashita.ffxi.recast.get_ability_recast_by_id(v.recast_id) is equal to -1 if the player's job doesn't have the JA at all
-      --Also checks if it the player has enough tp if it's a dnc ability, and that the player is not dead
+      -- ashita.ffxi.recast.get_ability_recast_by_id(v.recast_id) is equal to -1 if the player's job doesn't have the JA at all
+      -- Also checks if it the player has enough tp if it's a dnc ability, and if the player is not dead
       if ashita.ffxi.recast.get_ability_recast_by_id(v.recast_id) == 0 and AshitaCore:GetDataManager():GetParty():GetMemberCurrentTP(0) >= v.tp_cost and AshitaCore:GetDataManager():GetParty():GetMemberCurrentHP(0) > 0 then
         if not v.engaged_only or (v.engaged_only and GetPlayerEntity().Status==1) then
-          AutoJAMessage("USING : "..v.en);
-          AshitaCore:GetChatManager():QueueCommand('/ja "'..v.en..'" <me>', 1)
+          -- Doesn't try to use JA if you can't
+          if not HaveBuff("amnesia") and not HaveBuff("impairment") and (not HaveBuff("Paralysis") or v.use_if_paralyzed) then
+            AutoJAMessage("USING : "..v.en);
+            AshitaCore:GetChatManager():QueueCommand('/ja "'..v.en..'" <me>', 1);
+            return;
+          end
         end
-        return;
       end
     end
   end
