@@ -23,4 +23,4 @@ Type /autoja help in game to list commands :
 /autoja add Hasso<br>
 /autoja add Aggressor on
 
-/autoja add "Haste Samba" on on
+/autoja add "Haste Samba" on
